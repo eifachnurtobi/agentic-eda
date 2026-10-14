@@ -1,0 +1,24 @@
+# The sandbox every piece of generated code runs in. The engine starts it with
+# `docker compose run` and adds only what differs per execution: the mounts, the container
+# name, the user, and the CPU/memory limits from project.yaml (as EDA_CPUS / EDA_MEMORY).
+#
+# The image is built automatically when it is missing. After changing docker/Dockerfile or
+# docker/requirements.lock, rebuild it with `docker compose build`.
+services:
+  sandbox:
+    image: eda-lite:latest
+    build: ./docker
+    network_mode: none   # invariant: generated code never has network access
+    read_only: true      # nothing is writable except the mounts and /tmp
+    tmpfs:
+      - /tmp
+    working_dir: /work
+    environment:
+      HOME: /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    cpus: ${EDA_CPUS:-2}
+    mem_limit: ${EDA_MEMORY:-2g}

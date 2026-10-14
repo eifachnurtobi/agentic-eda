@@ -1,0 +1,13 @@
+# EVALUATOR-ONLY: the expected value of every claim in project.yaml. Never mounted into
+# the sandbox, never in a prompt. Text and whole numbers must match exactly; other
+# numbers within 0.1% (relative).
+n_rows: 33076
+n_columns: 40
+n_duplicate_flare_ids: 0
+max_counts_4_10_keV: 27216076
+median_counts_4_10_keV: 3199
+most_common_estimated_class: C1
+n_strong_flares: 1637
+n_attenuator_flares: 263
+n_imaging_errors: 2476
+mean_solo_distance_au: 0.659633

@@ -1,0 +1,37 @@
+project_id: stix_flares
+research_question: >-
+  How did the solar flare activity recorded by STIX evolve between February 2021 and
+  February 2026: how many flares peaked in each calendar month and year, and did strong
+  flares (STIX-estimated GOES class M or X) make up a growing share of all flares?
+dataset: stix_flares.csv
+seeds: [1, 2, 3, 4, 5]
+
+# Shared definitions for the claims below:
+#   - a flare's month and year are taken from `peak_UTC`
+#   - a flare is "strong" when `goes_estimated_mean_class` starts with M or X
+claims:
+  n_flares: Number of rows (flares) in the dataset.
+  n_duplicate_flare_ids: Number of rows whose `flare_id` repeats an earlier row.
+  n_months: Number of distinct calendar months (YYYY-MM) that contain at least one flare.
+  busiest_month: The calendar month with the most flares, as text in the form YYYY-MM.
+  busiest_month_count: Number of flares in the busiest calendar month.
+  flares_2021: Number of flares with peak time in calendar year 2021.
+  flares_2022: Number of flares with peak time in calendar year 2022.
+  flares_2023: Number of flares with peak time in calendar year 2023.
+  flares_2024: Number of flares with peak time in calendar year 2024.
+  flares_2025: Number of flares with peak time in calendar year 2025.
+  n_strong_flares: Number of strong flares in the whole dataset.
+  strong_share_overall: Strong flares divided by all flares, as a fraction between 0 and 1.
+  strong_share_2021: Fraction of the flares of calendar year 2021 that are strong.
+  strong_share_2022: Fraction of the flares of calendar year 2022 that are strong.
+  strong_share_2023: Fraction of the flares of calendar year 2023 that are strong.
+  strong_share_2024: Fraction of the flares of calendar year 2024 that are strong.
+  strong_share_2025: Fraction of the flares of calendar year 2025 that are strong.
+
+model:
+  name: qwen3.5:4b
+  request_timeout_s: 240
+
+execution:
+  code_timeout_s: 120
+  total_run_budget_s: 1500

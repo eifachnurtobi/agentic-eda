@@ -1,0 +1,30 @@
+project_id: stix_flares_simple
+research_question: >-
+  What does the STIX flare catalogue contain: how many flares does it hold, how large are
+  they in X-ray counts and estimated GOES class, how many are strong (class M or X), and
+  under which observing conditions were they recorded?
+dataset: stix_flares.csv
+seeds: [1, 2, 3, 4, 5]
+
+# The easy version of projects/stix_flares: every claim is one pandas expression on one
+# column, and no claim needs another claim's result.
+claims:
+  n_rows: Number of rows in the file.
+  n_columns: Number of columns in the file.
+  n_duplicate_flare_ids: Number of rows whose `flare_id` repeats an earlier row.
+  max_counts_4_10_keV: Largest value in the column `4-10 keV`.
+  median_counts_4_10_keV: Median of the column `4-10 keV`.
+  most_common_estimated_class: The most frequent value in the column `goes_estimated_mean_class`,
+    as text exactly as it appears in the file.
+  n_strong_flares: Number of rows whose `goes_estimated_mean_class` starts with M or X.
+  n_attenuator_flares: Number of rows where `att_in` is True.
+  n_imaging_errors: Number of rows where `error_with_imaging` is True.
+  mean_solo_distance_au: Mean of the column `solo_position_AU_distance`.
+
+model:
+  name: qwen3.5:4b
+  request_timeout_s: 240
+
+execution:
+  code_timeout_s: 120
+  total_run_budget_s: 1500

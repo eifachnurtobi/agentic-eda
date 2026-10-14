@@ -1,0 +1,18 @@
+project_id: tiny_project
+research_question: How do the two groups differ in their typical value, and are there outliers?
+dataset: tiny_dataset.csv
+seeds: [1, 2, 3]
+
+claims:
+  n_rows: Number of rows in the dataset.
+  mean_a: Mean of `value` for group A.
+  mean_b: Mean of `value` for group B.
+  n_outliers: Number of rows whose `value` is more than 3 sample standard deviations away from the
+    overall mean.
+
+model:
+  request_timeout_s: 30
+
+execution:
+  code_timeout_s: 30
+  total_run_budget_s: 300

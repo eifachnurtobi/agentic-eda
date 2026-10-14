@@ -1,0 +1,7 @@
+# EVALUATOR-ONLY: the expected value of every claim in project.yaml. Never mounted into
+# the sandbox, never in a prompt. Text and whole numbers must match exactly; other
+# numbers within 0.1% (relative).
+n_rows: 20
+mean_a: 10.0
+mean_b: 28.0
+n_outliers: 1
