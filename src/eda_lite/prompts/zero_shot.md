@@ -1,4 +1,4 @@
-Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. Think only for a few short sentences before coming up with a syntacically correct, complete and comprehensive answer.
+Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. Think only for a few short sentences before coming up with a syntacically correct and complete answer.
 
 ## Research question
 {research_question}

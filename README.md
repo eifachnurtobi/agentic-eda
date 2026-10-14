@@ -80,6 +80,8 @@ runs/<time>_<project>_<pattern>/
       trace.jsonl        one line per model call, cell, execution, grade
       prompt_NNN.md      the exact text of model call NNN
       thinking_NNN.md    its reasoning, when the model thinks (kept even if the call timed out)
+      continuation_NNN.md  if the reasoning was cut at `thinking_budget`: the exact text the
+                         model continued from (prompt, cut reasoning, injected `</think>`)
       call_NNN.json      its full request and response (or error)
       response_NNN.*     the answer: .ipynb before it ran, .md as free text, .txt if unparsable
       exec_NNN.*.txt     what execution NNN printed outside the notebook, if anything

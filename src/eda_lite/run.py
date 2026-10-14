@@ -17,6 +17,8 @@ what it did under `logs/` and appends a line to the trace, so a pattern needs no
           trace.jsonl      one line per model call, cell, execution, grade
           prompt_NNN.md    the exact text of model call NNN
           thinking_NNN.md  its reasoning, when the model thinks (also when it ran out of time)
+          continuation_NNN.md  when the reasoning was cut at the thinking budget: the exact text
+                           the model continued from (prompt, cut reasoning, injected </think>)
           call_NNN.json    its full request and response
           response_NNN.*   the answer: .ipynb before it ran, .md as text, .txt if unparsable
           exec_NNN.*.txt   what execution NNN printed outside the notebook (if anything)
@@ -219,6 +221,10 @@ class Run:
         thinking = body.get("message", {}).get("thinking")
         if thinking:  # the model's reasoning, readable on its own (partial if it ran out of time)
             event["thinking"] = self.save(f"{LOGS}/thinking_{number}.md", thinking)
+        if body.get("continuation"):  # cut at the thinking budget: what the model continued from
+            event["continuation"] = self.save(
+                f"{LOGS}/continuation_{number}.md", body["continuation"]["prompt"]
+            )
         event |= {
             "thinking_chars": len(thinking or ""),
             "thinking_truncated": body.get("thinking_truncated", False),

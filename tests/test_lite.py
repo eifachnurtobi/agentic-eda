@@ -329,6 +329,9 @@ def test_chat_streams_thinking_and_content(project, monkeypatch):
         "thinking": "Let me think.",
     }
     assert (body["done_reason"], body["eval_count"], body["prompt_eval_count"]) == ("stop", 9, 5)
+    (only,) = body["phases"]  # not cut: one request, with Ollama's own counts
+    assert only["endpoint"] == "chat" and (only["eval_count"], only["done_reason"]) == (9, "stop")
+    assert only["seconds"] >= 0
 
 
 def test_chat_timeout_keeps_partial_answer_and_payload(project, monkeypatch):
@@ -397,6 +400,15 @@ def test_thinking_budget_cuts_reasoning_and_injects_end_of_thinking(project, mon
     assert body["message"] == {"role": "assistant", "content": '{"cells": []}', "thinking": "ab"}
     assert body["thinking_truncated"] is True and body["continuation"] == continuation
     assert body["eval_count"] == 4 + 2 and "context" not in body and "response" not in body
+    cut, answer = body["phases"]  # one entry per request, so the first one's cost is kept
+    assert cut["endpoint"] == "chat" and cut["stopped_by"] == "thinking_budget"
+    assert cut["thinking_tokens"] == 2 and "eval_count" not in cut
+    assert answer["endpoint"] == "generate"
+    assert (answer["eval_count"], answer["prompt_eval_count"], answer["done_reason"]) == (
+        4,
+        30,
+        "stop",
+    )
     assert payload["think"] is True  # the original request, as sent
 
 
@@ -405,3 +417,23 @@ def test_thinking_budget_is_ignored_without_think(project, monkeypatch):
     config = project.config.model.model_copy(update={"think": False, "thinking_budget": 1})
     _, body = model.chat([], config, seed=1, schema=None, timeout_s=60)
     assert "thinking_truncated" not in body
+
+
+def test_cut_reasoning_logs_the_continuation_text(project, tmp_path, monkeypatch):
+    _no_docker(monkeypatch)
+    continuation = {"raw": True, "prompt": "<|im_start|>user\nTask<|im_end|>\n…</think>\n\n"}
+    body = {
+        "done": True,
+        "message": {"role": "assistant", "content": "not json", "thinking": "cut"},
+        "thinking_truncated": True,
+        "continuation": continuation,
+        "phases": [{"endpoint": "chat"}, {"endpoint": "generate"}],
+    }
+    monkeypatch.setattr(run, "chat", lambda *args, **kwargs: ({"messages": []}, body))
+    invocation = run.Invocation(project, "zero_shot", PATTERNS["zero_shot"], tmp_path / "runs")
+    result = invocation.run(1)
+    assert result.path("logs/continuation_001.md").read_text() == continuation["prompt"]
+    record = json.loads(result.path("logs/call_001.json").read_text())
+    assert [phase["endpoint"] for phase in record["response"]["phases"]] == ["chat", "generate"]
+    event = json.loads(result.path(TRACE).read_text().splitlines()[1])
+    assert event["continuation"] == "logs/continuation_001.md"

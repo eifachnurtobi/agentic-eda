@@ -45,6 +45,18 @@ BUDGET_NOTE = (
 )
 
 
+# Counts and durations Ollama reports in a request's final chunk (durations in nanoseconds).
+OLLAMA_STATS = (
+    "prompt_eval_count",
+    "eval_count",
+    "done_reason",
+    "total_duration",
+    "load_duration",
+    "prompt_eval_duration",
+    "eval_duration",
+)
+
+
 class _StreamFailure(Exception):
     def __init__(self, kind: str, message: str):
         super().__init__(message)
@@ -78,13 +90,19 @@ def chat(
     budget = config.thinking_budget if config.think else None
     deadline = time.monotonic() + timeout_s
     thinking, content, final, continuation = [], [], None, None
+    phases: list[dict] = []  # one entry per request: its time and Ollama's counts
+
+    def phase(endpoint: str, started: float, last: dict | None = None, **fields) -> None:
+        stats = {key: last[key] for key in OLLAMA_STATS if key in (last or {})}
+        seconds = round(time.monotonic() - started, 3)
+        phases.append({"endpoint": endpoint, "seconds": seconds, **stats, **fields})
 
     def body(last: dict | None) -> dict:
         """The same shape as a non-streamed chat reply: the last chunk, with the whole message."""
         message = {"role": "assistant", "content": "".join(content)}
         if thinking:
             message["thinking"] = "".join(thinking)
-        reply = {**(last or {"done": False}), "message": message}
+        reply = {**(last or {"done": False}), "message": message, "phases": phases}
         reply.pop("response", None)  # /api/generate's chunk field; the text is in `message`
         reply.pop("context", None)  # /api/generate's token ids: large and of no use here
         if continuation is not None:
@@ -93,6 +111,7 @@ def chat(
                 reply["eval_count"] = (last.get("eval_count") or 0) + len(thinking)
         return reply
 
+    endpoint, started = "chat", time.monotonic()
     try:
         url = f"{config.base_url}/api/chat"
         for chunk in _chunks(url, payload, deadline, timeout_s):
@@ -105,7 +124,12 @@ def chat(
                 final = chunk
             elif budget and not content and len(thinking) >= budget:
                 break  # closes the stream, which stops the generation
-        if final is None:  # the budget is used up: close the reasoning, let the model answer
+        if final is not None:
+            phase("chat", started, final)
+        else:  # the budget is used up: close the reasoning, let the model answer
+            # Ollama reports counts only in the final chunk, which a cut stream never sends.
+            phase("chat", started, thinking_tokens=len(thinking), stopped_by="thinking_budget")
+            endpoint, started = "generate", time.monotonic()
             continuation = {
                 "model": config.name,
                 "prompt": _raw_prompt(messages, "".join(thinking)),
@@ -121,7 +145,9 @@ def chat(
                     content.append(chunk["response"])
                 if chunk.get("done"):
                     final = chunk
+            phase("generate", started, final)
     except _StreamFailure as failure:
+        phase(endpoint, started, stopped_by=failure.kind)
         raise ModelError(failure.kind, str(failure), payload, body(None)) from None
     return payload, body(final)
 
@@ -154,7 +180,7 @@ def _raw_prompt(messages: list[dict], thinking: str) -> str:
     reasoning cut off and closed, so the model continues with the answer itself."""
     turns = "".join(f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages)
     reasoning = thinking.strip()
-    return f"{turns}<|im_start|>assistant\n<think>\n{reasoning}\n\n{BUDGET_NOTE}\n</think>\n\n"
+    return f"{turns}<|im_start|>assistant\n{reasoning}\n\n{BUDGET_NOTE}\n</think>\n\n"
 
 
 def parse_cells(text: str) -> list[dict]:
