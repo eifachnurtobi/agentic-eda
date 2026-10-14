@@ -35,6 +35,7 @@ uv run pytest                                             # unit tests; `-m dock
 | try a different prompt | edit the template: `compare` tells old and new apart by its hash. To keep both runnable side by side, add a pattern and a template of the same name |
 | the agent's behaviour (reflection, retries, ...) | add a function to `src/eda_lite/patterns.py` |
 | model, timeouts, seeds | `projects/<id>/project.yaml` (the only place; `--seeds` picks a subset for one call) |
+| how long the model thinks | `model.thinking_budget` in project.yaml (with `think: true`): after that many reasoning tokens the reasoning is cut, closed with `</think>`, and the model answers from there (budget forcing). It uses Qwen's chat template, so it is for qwen-family models. Ollama itself has no thinking budget for qwen3. |
 | the claims and their answers | `projects/<id>/project.yaml` (`claims:`) and `projects/<id>/evaluation_spec/answers.yaml` (see below) |
 
 A pattern is a plain function of a `Run`, registered in `PATTERNS`. Its prompt is the template
@@ -78,6 +79,7 @@ runs/<time>_<project>_<pattern>/
       run.json           this seed: id, seed, times, status, error, score
       trace.jsonl        one line per model call, cell, execution, grade
       prompt_NNN.md      the exact text of model call NNN
+      thinking_NNN.md    its reasoning, when the model thinks (kept even if the call timed out)
       call_NNN.json      its full request and response (or error)
       response_NNN.*     the answer: .ipynb before it ran, .md as free text, .txt if unparsable
       exec_NNN.*.txt     what execution NNN printed outside the notebook, if anything
@@ -85,14 +87,18 @@ runs/<time>_<project>_<pattern>/
 
 **Comparing prompts.** `eda-lite compare [call]` (default: the latest; otherwise part of a
 folder name) prints, to the console only, how that call's prompt does against every other
-prompt tried on the same project, pattern, model, dataset and answer key. Calls that differ
-in any of these are left out, so nothing needs re-grading. The output has three parts:
+prompt tried with the same pattern, an identical `config.yaml` (project, claims, model
+settings such as `think`, temperature, `num_ctx` and `thinking_budget`, execution limits),
+the same dataset and the same answer key. Calls that differ in any of these are left out, so
+only the prompt varies between rows, and nothing needs re-grading. The output has three
+parts:
 
 - **Calls:** one row per call, oldest first: its prompt, its seeds, and stats over its seeds.
 - **Prompts:** one row per prompt text, best mean score first, with stats over every seed run
   with that prompt and its first errors. The prompt is named by its hash, which covers the
   pattern's template and the setup cell, so an edit in place shows up as a new row.
-- **Overview:** what all rows share (project, pattern, model, dataset and answer key), and the
+- **Overview:** what all rows share (project, pattern, model, thinking, config hash, dataset
+  and answer key), and the
   call you asked about with its prompt.
 
 The stats are score (mean ± sd, and min – max), perfect score (`k/n`: k of the n seeds got

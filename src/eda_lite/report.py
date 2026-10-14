@@ -3,11 +3,14 @@
 Evaluator-side: these show expected values, so no pattern may put them in front of a model.
 """
 
+import hashlib
 import json
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, pstdev
+
+import yaml
 
 from eda_lite.grade import CHECKS, INVOCATION, METRICS, RUN_INFO, TRACE, read_trace
 
@@ -134,14 +137,15 @@ def _describe(e: dict) -> str:
 
 def compare(target: Path, runs_root: Path) -> str:
     """The prompt of invocation `target` against every other prompt tried with the same
-    project, pattern, model, dataset and answer key: a table of the invocations, a table of
-    the prompts (invocations with the same prompt text pool their seeds), then an overview of
-    what they share. A failed seed counts as 0."""
-    info = _read(target / INVOCATION)
-    same = ("project_id", "pattern", "model", "dataset_sha", "answers_sha")
+    pattern, an identical config.yaml (project, model settings, execution limits), the same
+    dataset and the same answer key: a table of the invocations, a table of the prompts
+    (invocations with the same prompt text pool their seeds), then an overview of what they
+    share. A failed seed counts as 0."""
+    info = _read(target / INVOCATION) | {"config_sha": _config_sha(target)}
+    same = ("pattern", "config_sha", "dataset_sha", "answers_sha")
     calls: dict[str, tuple[str, list[dict]]] = {}  # invocation -> (prompt_sha, seed rows)
     for path in sorted(runs_root.glob(f"*/{INVOCATION}")):
-        other = _read(path)
+        other = _read(path) | {"config_sha": _config_sha(path.parent)}
         if any(other.get(key) != info.get(key) for key in same) or "ended_at" not in other:
             continue
         seeds = sorted(
@@ -184,6 +188,8 @@ def compare(target: Path, runs_root: Path) -> str:
             f"Project   {info['project_id']}",
             f"Pattern   {info['pattern']}",
             f"Model     {info['model']}",
+            f"Thinking  {_thinking(target)}",
+            f"Config    {info['config_sha'][:7]} (identical config.yaml in every call)",
             f"Dataset   {info['dataset_sha'][:7]} · answers {info['answers_sha'][:7]}",
             f"Call      {target.name} (prompt {info['prompt_sha'][:7]})",
             "Means are over seeds (a call's seeds, or all seeds with that prompt).",
@@ -202,6 +208,21 @@ STAT_COLUMNS = [
     "Output tokens (mean)",
     "Seconds (mean)",
 ]
+
+
+def _config_sha(invocation: Path) -> str | None:
+    """The hash of an invocation's config.yaml: only calls with identical files are compared."""
+    path = invocation / "config.yaml"
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else None
+
+
+def _thinking(invocation: Path) -> str:
+    """Whether the model thought, from config.yaml (identical for every compared call)."""
+    model = yaml.safe_load((invocation / "config.yaml").read_text())["model"]
+    if not model.get("think"):
+        return "off"
+    budget = model.get("thinking_budget")
+    return f"on (budget {budget} tokens)" if budget else "on (no budget)"
 
 
 def _mean_score(seeds: list[dict]) -> float:

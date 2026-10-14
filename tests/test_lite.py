@@ -6,7 +6,7 @@ import shutil
 import pytest
 from conftest import FIXTURE_PROJECT, cells_response
 
-from eda_lite import prompts, run
+from eda_lite import model, prompts, run
 from eda_lite.config import ConfigError, load_project
 from eda_lite.grade import CHECKS, METRICS, RUN_INFO, TRACE, grade, load_answers, matches
 from eda_lite.model import ModelError, parse_cells
@@ -207,6 +207,15 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
     )
     other_model.run(1)
     other_model.finish()
+    warmer = project.config.model.model_copy(update={"temperature": 0.7})  # same model name
+    other_setting = _invocation(
+        project.__class__(project.dir, project.config.model_copy(update={"model": warmer})),
+        tmp_path,
+        monkeypatch,
+        "not json",
+    )
+    other_setting.run(1)
+    other_setting.finish()
 
     table = compare(edited.dir, tmp_path / "runs")
     calls_part, rest = table.removeprefix("Calls\n").split("\nPrompts\n")
@@ -225,7 +234,7 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
     assert "First errors" not in calls_part
 
     prompt_rows = rows(prompts_part)
-    assert len(prompt_rows) == 2  # other pattern, answer key and model are left out
+    assert len(prompt_rows) == 2  # other pattern, answer key, model and temperature left out
     new = next(row for row in prompt_rows if edited.info["prompt_sha"][:7] in row)
     pooled = next(row for row in prompt_rows if old.info["prompt_sha"][:7] in row)
     assert new.startswith("| → |")
@@ -233,6 +242,8 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
 
     assert f"Call      {edited.dir.name} (prompt {edited.info['prompt_sha'][:7]})" in overview
     assert f"Model     {project.config.model.name}" in overview
+    assert "Config    " in overview
+    assert "Thinking  off" in overview
 
 
 def test_trace_prints_every_seed_or_one(tmp_path, monkeypatch, capsys):
@@ -266,3 +277,131 @@ def test_trace_prints_every_seed_or_one(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         trace("_p_zero_shot")  # ambiguous
     assert "must match one invocation" in capsys.readouterr().err
+
+
+class _FakeStream:
+    """Stands in for a streamed Ollama reply: one JSON object per line."""
+
+    def __init__(self, chunks: list[dict]):
+        self.lines = [json.dumps(chunk).encode() for chunk in chunks]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_lines(self):
+        yield from self.lines
+
+
+def _stream(monkeypatch, chunks: list[dict]) -> dict:
+    sent = {}
+
+    def post(url, json, stream, timeout):
+        sent.update(json)
+        return _FakeStream(chunks)
+
+    monkeypatch.setattr(model.requests, "post", post)
+    return sent
+
+
+THINKING_CHUNKS = [
+    {"message": {"thinking": "Let me "}, "done": False},
+    {"message": {"thinking": "think."}, "done": False},
+    {"message": {"content": '{"cells": '}, "done": False},
+    {"message": {"content": "[]}"}, "done": False},
+    {"message": {}, "done": True, "done_reason": "stop", "eval_count": 9, "prompt_eval_count": 5},
+]
+
+
+def test_chat_streams_thinking_and_content(project, monkeypatch):
+    sent = _stream(monkeypatch, THINKING_CHUNKS)
+    config = project.config.model.model_copy(update={"think": True})
+    payload, body = model.chat([], config, seed=3, schema=None, timeout_s=60)
+    assert payload == sent and payload["think"] is True and payload["options"]["seed"] == 3
+    assert body["message"] == {
+        "role": "assistant",
+        "content": '{"cells": []}',
+        "thinking": "Let me think.",
+    }
+    assert (body["done_reason"], body["eval_count"], body["prompt_eval_count"]) == ("stop", 9, 5)
+
+
+def test_chat_timeout_keeps_partial_answer_and_payload(project, monkeypatch):
+    _stream(monkeypatch, THINKING_CHUNKS[:3])
+    with pytest.raises(model.ModelError) as error:
+        model.chat([], project.config.model, seed=1, schema=None, timeout_s=0)
+    assert error.value.kind == "timeout"
+    assert error.value.payload["options"]["num_ctx"] == project.config.model.num_ctx
+    assert error.value.partial["message"]["thinking"] == "Let me "
+
+
+def test_timed_out_call_logs_payload_and_thinking(project, tmp_path, monkeypatch):
+    _no_docker(monkeypatch)
+    payload = {"model": "m", "messages": [], "think": True, "options": {"num_ctx": 16384}}
+    partial = {"done": False, "message": {"role": "assistant", "content": "", "thinking": "hmm"}}
+
+    def chat(messages, config, *, seed, schema, timeout_s):
+        raise model.ModelError("timeout", "no complete response", payload, partial)
+
+    monkeypatch.setattr(run, "chat", chat)
+    invocation = run.Invocation(project, "zero_shot", PATTERNS["zero_shot"], tmp_path / "runs")
+    result = invocation.run(1)
+    record = json.loads(result.path("logs/call_001.json").read_text())
+    assert record["request"] == payload and record["response"] == partial
+    assert result.path("logs/thinking_001.md").read_text() == "hmm"
+    event = json.loads(result.path(TRACE).read_text().splitlines()[1])
+    assert event["event"] == "model_call" and event["thinking_chars"] == 3
+    assert event["error"]["kind"] == "timeout"
+
+
+def test_thinking_budget_cuts_reasoning_and_injects_end_of_thinking(project, monkeypatch):
+    requests_sent = []
+    replies = {
+        "/api/chat": [
+            {"message": {"thinking": word}, "done": False} for word in ["a", "b", "c", "d", "e"]
+        ],
+        "/api/generate": [
+            {"response": '{"cells": ', "done": False},
+            {
+                "response": "[]}",
+                "done": True,
+                "done_reason": "stop",
+                "eval_count": 4,
+                "prompt_eval_count": 30,
+                "context": [1, 2, 3],
+            },
+        ],
+    }
+
+    def post(url, json, stream, timeout):
+        requests_sent.append((url, json))
+        return _FakeStream(replies[url.removeprefix(project.config.model.base_url)])
+
+    monkeypatch.setattr(model.requests, "post", post)
+    config = project.config.model.model_copy(update={"think": True, "thinking_budget": 2})
+    messages = [{"role": "user", "content": "Do the task."}]
+    payload, body = model.chat(messages, config, seed=1, schema=model.CELLS_SCHEMA, timeout_s=60)
+
+    (chat_url, _), (generate_url, continuation) = requests_sent
+    assert chat_url.endswith("/api/chat") and generate_url.endswith("/api/generate")
+    assert continuation["raw"] is True and continuation["format"] == model.CELLS_SCHEMA
+    assert continuation["prompt"] == (
+        "<|im_start|>user\nDo the task.<|im_end|>\n<|im_start|>assistant\n<think>\nab\n\n"
+        f"{model.BUDGET_NOTE}\n</think>\n\n"
+    )  # cut after two reasoning chunks
+    assert body["message"] == {"role": "assistant", "content": '{"cells": []}', "thinking": "ab"}
+    assert body["thinking_truncated"] is True and body["continuation"] == continuation
+    assert body["eval_count"] == 4 + 2 and "context" not in body and "response" not in body
+    assert payload["think"] is True  # the original request, as sent
+
+
+def test_thinking_budget_is_ignored_without_think(project, monkeypatch):
+    _stream(monkeypatch, THINKING_CHUNKS)
+    config = project.config.model.model_copy(update={"think": False, "thinking_budget": 1})
+    _, body = model.chat([], config, seed=1, schema=None, timeout_s=60)
+    assert "thinking_truncated" not in body

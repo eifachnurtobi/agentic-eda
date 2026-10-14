@@ -24,6 +24,9 @@ class ModelConfig(_Strict):
     temperature: float = Field(0.2, ge=0)
     request_timeout_s: float = Field(30, gt=0)  # per model call; independent of execution limits
     think: bool = False
+    # With `think`: cut the reasoning after this many tokens and let the model answer from
+    # there (budget forcing). Uses Qwen's chat template, so it is for qwen-family models.
+    thinking_budget: int | None = Field(None, gt=0)
     num_ctx: int = Field(8192, gt=0)
 
 

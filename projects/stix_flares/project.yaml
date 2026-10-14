@@ -4,7 +4,7 @@ research_question: >-
   February 2026: how many flares peaked in each calendar month and year, and did strong
   flares (STIX-estimated GOES class M or X) make up a growing share of all flares?
 dataset: stix_flares.csv
-seeds: [1, 2, 3, 4, 5]
+seeds: [80085, 42069, 43, 21, 100.0]
 
 # Shared definitions for the claims below:
 #   - a flare's month and year are taken from `peak_UTC`
@@ -29,7 +29,11 @@ claims:
   strong_share_2025: Fraction of the flares of calendar year 2025 that are strong.
 
 model:
-  name: qwen3.5:4b
+  name: qwen3:4b
+  think: true
+  thinking_budget: 1024  # reasoning tokens; then </think> is injected and it answers
+  temperature: 0.85      # thinking mode: Qwen advises against near-greedy decoding
+  num_ctx: 16384        # prompt + reasoning + answer must fit in the window
   request_timeout_s: 240
 
 execution:

@@ -16,6 +16,7 @@ what it did under `logs/` and appends a line to the trace, so a pattern needs no
           run.json         this seed: id, seed, times, status, error, score
           trace.jsonl      one line per model call, cell, execution, grade
           prompt_NNN.md    the exact text of model call NNN
+          thinking_NNN.md  its reasoning, when the model thinks (also when it ran out of time)
           call_NNN.json    its full request and response
           response_NNN.*   the answer: .ipynb before it ran, .md as text, .txt if unparsable
           exec_NNN.*.txt   what execution NNN printed outside the notebook (if anything)
@@ -208,11 +209,21 @@ class Run:
         except ModelError as error:
             answer.error = error
             record["error"] = event["error"] = {"kind": error.kind, "message": str(error)}
+            if error.payload is not None:  # the call failed: keep what was sent and what arrived
+                record["request"], record["response"] = error.payload, error.partial
             if answer.text is not None:  # an answer that came back but broke the contract
                 event["response"] = self.save(
                     f"{LOGS}/response_{number}.txt", f"Parsing failed: {error}\n\n{answer.text}\n"
                 )
-        record["request"] = record.get("request") or {"messages": messages}
+        body = record.get("response") or {}
+        thinking = body.get("message", {}).get("thinking")
+        if thinking:  # the model's reasoning, readable on its own (partial if it ran out of time)
+            event["thinking"] = self.save(f"{LOGS}/thinking_{number}.md", thinking)
+        event |= {
+            "thinking_chars": len(thinking or ""),
+            "thinking_truncated": body.get("thinking_truncated", False),
+            "done_reason": body.get("done_reason"),
+        }
         self.save(event["call"], record)
         self.log("model_call", latency_s=round(time.monotonic() - started, 3), **event)
         if answer.error and answer.error.kind == "timeout" and timeout_s == remaining:

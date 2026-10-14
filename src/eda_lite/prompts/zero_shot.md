@@ -1,4 +1,4 @@
-Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations.
+Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. Think only for a few short sentences before coming up with a syntacically correct, complete and comprehensive answer.
 
 ## Research question
 {research_question}
@@ -18,8 +18,7 @@ cell has already run before your first cell, so do not repeat it:
 {setup}
 ```
 
-Rulerinhos muy amigo:
-- Produce a valid Jupyter notebook that answers the claims.
+Rules:
 - A code cell holds only Python code. Explanations go into markdown cells or `#` comments.
   Never add uncommented text or fenced code block syntax into code cells.
 - One analysis per code cell. Keep cells short. Use report() not print().

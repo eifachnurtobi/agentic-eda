@@ -39,8 +39,8 @@ def main() -> int:
 
     comp = commands.add_parser(
         "compare",
-        help="compare an invocation's prompt with every other prompt tried on the same "
-        "project, pattern, dataset and answer key",
+        help="compare an invocation's prompt with every other prompt tried with the same "
+        "pattern, an identical config.yaml, the same dataset and the same answer key",
     )
     comp.add_argument("run", nargs="?", default="latest", help=RUN_HELP)
 
