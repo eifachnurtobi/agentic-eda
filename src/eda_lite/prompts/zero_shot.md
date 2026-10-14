@@ -18,7 +18,8 @@ cell has already run before your first cell, so do not repeat it:
 {setup}
 ```
 
-Rules:
+Rulerinhos muy amigo:
+- Produce a valid Jupyter notebook that answers the claims.
 - A code cell holds only Python code. Explanations go into markdown cells or `#` comments.
   Never add uncommented text or fenced code block syntax into code cells.
 - One analysis per code cell. Keep cells short. Use report() not print().
