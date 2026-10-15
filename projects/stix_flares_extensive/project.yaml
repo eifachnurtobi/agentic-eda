@@ -1,0 +1,113 @@
+project_id: stix_flares_extensive
+research_question: >-
+  What does the STIX flare catalogue (February 2021 to February 2026) contain and how clean
+  is it: can every field be parsed into a usable value, do related fields agree with each
+  other, how did flare activity evolve over time, how long do flares last and how often do
+  they occur, and how well does STIX's own GOES-class estimate agree with what GOES measured?
+dataset: stix_flares.csv
+seeds: [80085, 42069, 43, 21, 100.0, 804929, 134578, 414440, 320280494, 743992093]
+
+# The graded version of projects/stix_flares: claims run from trivial to multi-step, so the
+# score rises step by step as the agent improves. Every claim text defines its own terms
+# (only the claim lines reach the prompt) and needs no other claim's result.
+#   T1 (n_flares .. mean_solo_distance_au): read the file, no transform
+#   T2 (n_strong_flares .. n_missing_goes_class): one column, a filter or text operation
+#   T3 (median_counts_4_10_keV_attenuator .. northern_share): two columns
+#   T4 (most_common_peak_hour .. median_cpd_window_min): every kind of field parsed:
+#      datetimes, class text to flux (two-digit classes such as X14), a zero placeholder
+#      for missing GOES flux, version and timestamps embedded in a file name
+#   T5 (flares_2024 .. attenuator_flares_2025): calendar grouping
+#   T6 (median_rise_time_min .. goes_class_agreement): derived quantities, consistency checks
+#   T7 (median_waiting_time_min .. spearman_counts_vs_estimated_flux): several steps
+claims:
+  n_flares: Number of rows (flares) in the dataset.
+  n_columns: Number of columns in the dataset.
+  n_columns_with_missing: Number of columns that contain at least one missing (empty) value.
+  n_attenuator_flares: Number of flares where `att_in` is True.
+  n_imaging_errors: Number of flares where `error_with_imaging` is True.
+  max_counts_4_10_keV: Largest value in the column `4-10 keV`.
+  mean_solo_distance_au: Mean of the column `solo_position_AU_distance`.
+
+  n_strong_flares: Number of flares whose `goes_estimated_mean_class` starts with M or X.
+  n_x_class_flares: Number of flares whose `goes_estimated_mean_class` starts with X.
+  most_common_estimated_class: The most frequent value in the column `goes_estimated_mean_class`,
+    as text exactly as it appears in the file.
+  n_far_side_flares: Number of flares where `visible_from_earth` is False (missing values do
+    not count).
+  n_missing_goes_class: Number of flares where `GOES_class_time_of_flare` is empty (missing).
+
+  median_counts_4_10_keV_attenuator: Median of `4-10 keV` over the flares where `att_in` is True.
+  n_strong_far_side_flares: Number of flares where `visible_from_earth` is False and
+    `goes_estimated_mean_class` starts with M or X.
+  median_counts_4_10_keV_at_1au: Median over all flares of `4-10 keV` multiplied by the square
+    of `solo_position_AU_distance` (the counts scaled to 1 AU by the inverse-square law).
+  n_high_energy_below_background: Number of flares whose `50-84 keV` counts are smaller than
+    their `bkg 50-84 keV` background.
+  northern_share: Among the flares that have a `hgs_lat` value, the fraction (between 0 and 1)
+    with `hgs_lat` greater than 0 (northern solar hemisphere).
+
+  most_common_peak_hour: The hour of the day (UTC, 0 to 23) of `peak_UTC` that occurs most
+    often, as a whole number.
+  median_duration_min: Median flare duration in minutes, where duration is `end_UTC` minus
+    `start_UTC`.
+  max_estimated_class_flux: Convert every `goes_estimated_mean_class` to a flux in W/m2 (the
+    letter gives the base, A = 1e-8, B = 1e-7, C = 1e-6, M = 1e-5, X = 1e-4, multiplied by the
+    number after the letter, so M2.5 = 2.5e-5) and report the largest flux.
+  median_goes_class_flux: Convert every `GOES_class_time_of_flare` to a flux in W/m2 (the letter
+    gives the base, A = 1e-8, B = 1e-7, C = 1e-6, M = 1e-5, X = 1e-4, multiplied by the number
+    after the letter); classes without a number count as missing. The median of these fluxes.
+  median_goes_flux_recorded: Median of `GOES_flux_time_of_flare` over the flares that have a
+    `GOES_class_time_of_flare` (not missing).
+  n_cpd_version_2: Number of flares whose `cpd_filename` contains the file version `V02`.
+  median_cpd_window_min: Each `cpd_filename` contains a time window as two timestamps
+    `YYYYMMDDTHHMMSS-YYYYMMDDTHHMMSS`; over the flares that have a `cpd_filename`, the median
+    length of that window in minutes (second timestamp minus first).
+
+  flares_2024: Number of flares whose `peak_UTC` falls in calendar year 2024.
+  n_months: Number of distinct calendar months (YYYY-MM) of `peak_UTC` that contain at least
+    one flare.
+  busiest_month: The calendar month of `peak_UTC` with the most flares, as text in the form
+    YYYY-MM.
+  busiest_month_count: Number of flares whose `peak_UTC` falls in the busiest calendar month.
+  busiest_day: The calendar day (UTC) of `peak_UTC` with the most flares, as text in the form
+    YYYY-MM-DD.
+  busiest_day_count: Number of flares whose `peak_UTC` falls on the busiest calendar day.
+  attenuator_flares_2025: Number of flares whose `peak_UTC` falls in calendar year 2025 and
+    where `att_in` is True.
+
+  median_rise_time_min: Median flare rise time in minutes, where rise time is `peak_UTC` minus
+    `start_UTC`.
+  strong_share_2024: Among the flares whose `peak_UTC` falls in calendar year 2024, the fraction
+    (between 0 and 1) whose `goes_estimated_mean_class` starts with M or X.
+  year_highest_strong_share: Among the calendar years 2021 to 2025 of `peak_UTC`, the year in
+    which the largest fraction of flares has a `goes_estimated_mean_class` starting with M or X,
+    as a whole number such as 2021.
+  strong_share_far_side: Among the flares where `visible_from_earth` is False, the fraction
+    (between 0 and 1) whose `goes_estimated_mean_class` starts with M or X.
+  n_visibility_longitude_mismatch: Among the flares where `visible_from_earth` is not missing,
+    the number where `visible_from_earth` disagrees with the longitude, i.e. it is True while
+    the absolute value of `hgs_lon` is greater than 90, or False while it is at most 90.
+  goes_class_agreement: Among the flares where `visible_from_earth` is True and
+    `GOES_class_time_of_flare` is not missing, the fraction (between 0 and 1) whose
+    `GOES_class_time_of_flare` starts with the same letter as `goes_estimated_mean_class`.
+
+  median_waiting_time_min: Sort the flares by `peak_UTC`; the median time in minutes between
+    the peaks of consecutive flares.
+  longest_gap_days: Sort the flares by `peak_UTC`; the longest time in days between the peaks
+    of consecutive flares.
+  longest_gap_start_day: Sort the flares by `peak_UTC`; the calendar day (YYYY-MM-DD) of the
+    last flare peak before the longest time between the peaks of consecutive flares.
+  spearman_counts_vs_estimated_flux: Spearman rank correlation between `4-10 keV` and
+    `goes_estimated_mean_flux` over all flares.
+
+model:
+  name: qwen3:4b
+  think: true
+  thinking_budget: 1024  # reasoning tokens; then </think> is injected and it answers
+  temperature: 0.85      # thinking mode: Qwen advises against near-greedy decoding
+  num_ctx: 24576        # prompt + reasoning + answer must fit in the window
+  request_timeout_s: 240
+
+execution:
+  code_timeout_s: 120
+  total_run_budget_s: 1500

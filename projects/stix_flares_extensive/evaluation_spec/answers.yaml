@@ -1,0 +1,44 @@
+# EVALUATOR-ONLY: the expected value of every claim in project.yaml. Never mounted into
+# the sandbox, never in a prompt. Text and whole numbers must match exactly; other
+# numbers within 0.1% (relative).
+n_flares: 33076
+n_columns: 40
+n_columns_with_missing: 12
+n_attenuator_flares: 263
+n_imaging_errors: 2476
+max_counts_4_10_keV: 27216076
+mean_solo_distance_au: 0.659633
+n_strong_flares: 1637
+n_x_class_flares: 134
+most_common_estimated_class: C1
+n_far_side_flares: 15015
+n_missing_goes_class: 620
+median_counts_4_10_keV_attenuator: 4500
+n_strong_far_side_flares: 766
+median_counts_4_10_keV_at_1au: 1457.55
+n_high_energy_below_background: 726
+northern_share: 0.441797
+most_common_peak_hour: 15
+median_duration_min: 12.9334
+max_estimated_class_flux: 0.0014
+median_goes_class_flux: 2.6e-06
+median_goes_flux_recorded: 2.54082e-06
+n_cpd_version_2: 21742
+median_cpd_window_min: 84.4833
+flares_2024: 12330
+n_months: 61
+busiest_month: 2024-09
+busiest_month_count: 1724
+busiest_day: "2025-08-22"
+busiest_day_count: 146
+attenuator_flares_2025: 115
+median_rise_time_min: 4.06667
+strong_share_2024: 0.0515815
+year_highest_strong_share: 2023
+strong_share_far_side: 0.0510157
+n_visibility_longitude_mismatch: 453
+goes_class_agreement: 0.524527
+median_waiting_time_min: 33.0667
+longest_gap_days: 17.3828
+longest_gap_start_day: "2021-03-25"
+spearman_counts_vs_estimated_flux: 0.836624
