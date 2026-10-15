@@ -31,7 +31,7 @@ claims:
 model:
   name: qwen3:4b
   think: true
-  thinking_budget: 1024  # reasoning tokens; then </think> is injected and it answers
+  thinking_budget: 2048  # reasoning tokens; then </think> is injected and it answers
   temperature: 0.85      # thinking mode: Qwen advises against near-greedy decoding
   num_ctx: 16384        # prompt + reasoning + answer must fit in the window
   request_timeout_s: 240
