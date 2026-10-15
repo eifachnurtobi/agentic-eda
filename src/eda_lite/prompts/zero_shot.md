@@ -1,4 +1,6 @@
-Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. Think only for a few short sentences before coming up with a syntacically correct and complete answer.
+Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. 
+Separate tasks to ensure intermediate errors dont cause everything to fail.
+Think only for a few short sentences before coming up with a syntacically correct answer thats complete in content.
 
 ## Research question
 {research_question}
@@ -21,7 +23,8 @@ cell has already run before your first cell, so do not repeat it:
 Rules:
 - A code cell holds only Python code. Explanations go into markdown cells or `#` comments.
   Never add uncommented text or fenced code block syntax into code cells.
-- One analysis per code cell. Keep cells short. Use report() not print().
+- Add one code cell per claim or analysis . Keep cells short. Use report() not print(). 
+  Avoid multiple calls to report() in a single code cell.
 - CSV columns arrive as text or numbers. Convert a column before you use it and assign the
   result back to the same column, e.g. `df["start"] = pd.to_datetime(df["start"])`.
 - Call `report("<claim_id>", value)` for every claim under "Required claims" as soon as
