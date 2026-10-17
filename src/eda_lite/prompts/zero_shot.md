@@ -1,6 +1,6 @@
 Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. 
 Separate tasks to ensure intermediate errors dont cause everything to fail.
-Think only for a few short sentences before coming up with a syntacically correct answer thats complete in content.
+Think only for a few short sentences before coming up with a syntacically correct answer thats complete in content. Repeat this process until the thinking budget is used up, incrementally improving your understanding.
 
 ## Research question
 {research_question}

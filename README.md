@@ -11,7 +11,7 @@ fixed, and the CLI takes no paths:
 
 | What | Where |
 |---|---|
-| projects | `projects/<project_id>/` (`stix_flares`, `stix_flares_simple`); the CLI takes the ID |
+| projects | `projects/<project_id>/` (`stix_flares`, `stix_flares_simple`, `stix_flares_extensive`); the CLI takes the ID |
 | prompts | `src/eda_lite/prompts/<pattern>.md`: each pattern uses its own template |
 | runs | `runs/` |
 
