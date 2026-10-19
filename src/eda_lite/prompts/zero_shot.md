@@ -1,37 +1,46 @@
-Perform initial exploratory data analysis on this dataset and produce a report with code, tables, and visualizations. 
-Separate tasks to ensure intermediate errors dont cause everything to fail.
-Think only for a few short sentences before coming up with a syntacically correct answer thats complete in content. Repeat this process until the thinking budget is used up, incrementally improving your understanding.
+# Exploratory Data Analysis 
 
-## Research question
+You are an expert data scientist specialized in exploratory data analysis on novel datasets.
+
+## Dataset
+
+This is the dateset you will perform the exploratory data analysis on. 
+
+### Dataset documentation
+
+```markdown
+{docs}
+```
+
+### Research question
+
 {research_question}
 
-## Required claims
+### Required claims
+
 {claims}
 
-## Dataset documentation
-{docs}
+## Response Format
 
-## How to write the notebook
-Respond with one JSON object: {"cells": [{"type": "code" | "markdown", "content": "..."}]}.
-The cells form a Jupyter notebook and run top to bottom in one Python kernel. This setup
-cell has already run before your first cell, so do not repeat it:
+Respond with one JSON object in the format
+```JSON
+{"cells": [{"type": "code" | "markdown", "content": "..."}, ...]}.
+```
+The [setup cell](#setup-cell) and your response form a Jupyter notebook
+
+### How to answer claims & the research question
+
+Make your notebook more robust by creating a new section for each question. First state the question and walkthrough your approach in 1-10 sentences in a markdown cell. Then implement your approach in a code cell.
+To prevent subsequent errors, code cells should be independent of one another.
+
+### Setup cell
+
+The setup cell is prepended to your response and runs before your first cell, do not include it. Answer each claim using `report("<claim-id>", value)`, do not print the value. Show all plots using `report_plot("<plot name>")`, do not use show or savefig.
 
 ```python
 {setup}
 ```
 
-Rules:
-- A code cell holds only Python code. Explanations go into markdown cells or `#` comments.
-  Never add uncommented text or fenced code block syntax into code cells.
-- Add one code cell per claim or analysis . Keep cells short. Use report() not print(). 
-  Avoid multiple calls to report() in a single code cell.
-- CSV columns arrive as text or numbers. Convert a column before you use it and assign the
-  result back to the same column, e.g. `df["start"] = pd.to_datetime(df["start"])`.
-- Call `report("<claim_id>", value)` for every claim under "Required claims" as soon as
-  its value is computed. Compute every value with code; never type a value in.
-- End every plot with `report_plot("<short_name>")`; it saves the plot to `artifacts/` and
-  shows it. Do not call `plt.savefig` or `plt.show` yourself.
-- Available libraries: pandas, numpy, scipy, matplotlib, seaborn, scikit-learn. There is no
-  internet access, and the dataset is read-only.
-- You will not see any output, so markdown cells describe what is computed and why; they
-  never state numbers.
+# Task
+
+Your task is to answer the [required claims](#required-claims) one by one then complete the more open ended [research question](#research-question) at the end. Format your response as described in [Response Format](#response-format).

@@ -22,8 +22,9 @@ claims:
   mean_solo_distance_au: Mean of the column `solo_position_AU_distance`.
 
 model:
-  name: qwen3.5:4b
-  request_timeout_s: 240
+  name: qwen3:4b
+  num_ctx: 16384
+  request_timeout_s: 60
 
 execution:
   code_timeout_s: 120
