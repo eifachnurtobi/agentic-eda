@@ -26,16 +26,16 @@ Respond with one JSON object in the format
 ```JSON
 {"cells": [{"type": "code" | "markdown", "content": "..."}, ...]}.
 ```
-The [setup cell](#setup-cell) and your response form a Jupyter notebook
+The [setup cell](#setup-cell) and your response form a Jupyter notebook.
 
 ### How to answer claims & the research question
 
-Make your notebook more robust by creating a new section for each question. First state the question and walkthrough your approach in 1-10 sentences in a markdown cell. Then implement your approach in a code cell.
+Make your notebook robust by creating a new section for each report. State the question and walk through your approach in 2-10 sentences in a markdown cell, then implement your approach in a code cell.
 To prevent subsequent errors, code cells should be independent of one another.
 
 ### Setup cell
 
-The setup cell is prepended to your response and runs before your first cell, do not include it. Answer each claim using `report("<claim-id>", value)`, do not print the value. Show all plots using `report_plot("<plot name>")`, do not use show or savefig.
+The setup cell is prepended to your response and runs before your first cell, do not include it. Answer each claim using `report("<claim-id>", value)`, do not print the value. Show all plots using `report_plot("<plot name>")`, do not use show or savefig. You can access the dataset with the `df` variable, the setup cell imports it.
 
 ```python
 {setup}
@@ -43,4 +43,7 @@ The setup cell is prepended to your response and runs before your first cell, do
 
 # Task
 
-Your task is to answer the [required claims](#required-claims) one by one then complete the more open ended [research question](#research-question) at the end. Format your response as described in [Response Format](#response-format).
+Your task is to answer the [required claims](#required-claims) one by one then complete the more open ended [research question](#research-question) at the end. 
+Format your response as described in [Response Format](#response-format). 
+
+Answer all claims and the research question. Produce a well structured, complete and correct notebook.
