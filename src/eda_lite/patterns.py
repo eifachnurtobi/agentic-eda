@@ -20,4 +20,26 @@ def zero_shot(run: Run) -> None:
         run.execute(answer)
 
 
-PATTERNS: dict[str, Pattern] = {"zero_shot": zero_shot}
+# Basic reflection step
+# Man könnte das notebook auch zuerst laufen lassen, und
+# das ausgeführte notebook zurück ans llm geben (wäre besser)
+def reflection(run: Run) -> None:
+    # Mit dem prompt namen den prompt holen
+    prompt = run.prompt("zero_shot")
+    # Den prompt laufen lassen und antwort erhalten
+    answer = run.ask(prompt)
+    
+    # Die generierte antwort in den reflection prompt hineingeben
+    reflection_prompt = run.prompt("reflection", answer=answer.text)
+    # Den reflection promt laufen lassen und antwort erhalten
+    reflection_answer = run.ask(reflection_prompt)
+    
+    # Notebook laufen lassen
+    if reflection_answer.notebook:
+        run.execute(reflection_answer)
+
+
+PATTERNS: dict[str, Pattern] = {
+        "zero_shot": zero_shot,
+        "reflection": reflection,
+    }
