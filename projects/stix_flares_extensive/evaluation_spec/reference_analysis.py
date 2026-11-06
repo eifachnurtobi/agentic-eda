@@ -1,16 +1,3 @@
-"""Step 0 reference analysis: recomputes every expected value in `answers.yaml` with plain pandas.
-
-EVALUATOR-ONLY, like the rest of this directory: never mounted into a container, never
-put in a prompt. Run it from the eda-lite folder to check the answer key against the data:
-
-    uv run python projects/stix_flares_extensive/evaluation_spec/reference_analysis.py
-
-It prints one line per claim and exits non-zero if any value disagrees with `answers.yaml` (same
-matching rule as the grader).
-The definitions follow the claim texts in `project.yaml`: a flare is strong when
-`goes_estimated_mean_class` starts with M or X, and its year, month and day come from `peak_UTC`.
-"""
-
 import sys
 from pathlib import Path
 
@@ -25,8 +12,7 @@ CPD_WINDOW = r"cpd_(\d{8}T\d{6})-(\d{8}T\d{6})_"
 
 
 def class_to_flux(classes: pd.Series) -> pd.Series:
-    """GOES class text to W/m2: letter base times the number after it (`X14` = 1.4e-3).
-    Missing classes and classes without a number (`A`) give NaN."""
+
     parts = classes.astype("string").str.extract(r"^([ABCMX])(\d+(?:\.\d+)?)$")
     return parts[0].map(CLASS_BASE_FLUX).astype(float) * parts[1].astype(float)
 
@@ -38,7 +24,7 @@ def reference_values(frame: pd.DataFrame) -> dict:
     year = peak.dt.year
     estimated = frame["goes_estimated_mean_class"].astype("string").str[0]
     strong = estimated.isin(["M", "X"])
-    far_side = frame["visible_from_earth"] == False  # object column: True, False or NaN
+    far_side = frame["visible_from_earth"] == False
     near_side = frame["visible_from_earth"] == True
     has_visibility = frame["visible_from_earth"].notna()
     counts = frame["4-10 keV"]
@@ -55,7 +41,6 @@ def reference_values(frame: pd.DataFrame) -> dict:
     longitude_says_visible = frame["hgs_lon"].abs() <= 90
 
     return {
-        # T1: read the file, no transform
         "n_flares": len(frame),
         "n_columns": frame.shape[1],
         "n_columns_with_missing": int(frame.isna().any().sum()),
@@ -63,13 +48,11 @@ def reference_values(frame: pd.DataFrame) -> dict:
         "n_imaging_errors": int(frame["error_with_imaging"].sum()),
         "max_counts_4_10_keV": int(counts.max()),
         "mean_solo_distance_au": float(frame["solo_position_AU_distance"].mean()),
-        # T2: one column, a filter or text operation
         "n_strong_flares": int(strong.sum()),
         "n_x_class_flares": int((estimated == "X").sum()),
         "most_common_estimated_class": frame["goes_estimated_mean_class"].value_counts().idxmax(),
         "n_far_side_flares": int(far_side.sum()),
         "n_missing_goes_class": int(goes.isna().sum()),
-        # T3: two columns
         "median_counts_4_10_keV_attenuator": float(counts[frame["att_in"]].median()),
         "n_strong_far_side_flares": int((strong & far_side).sum()),
         "median_counts_4_10_keV_at_1au": float(
@@ -77,7 +60,6 @@ def reference_values(frame: pd.DataFrame) -> dict:
         ),
         "n_high_energy_below_background": int((frame["50-84 keV"] < frame["bkg 50-84 keV"]).sum()),
         "northern_share": float((lat > 0).mean()),
-        # T4: every kind of field parsed
         "most_common_peak_hour": int(peak.dt.hour.value_counts().idxmax()),
         "median_duration_min": float((end - start).dt.total_seconds().median() / 60),
         "max_estimated_class_flux": float(class_to_flux(frame["goes_estimated_mean_class"]).max()),
@@ -85,7 +67,6 @@ def reference_values(frame: pd.DataFrame) -> dict:
         "median_goes_flux_recorded": float(frame["GOES_flux_time_of_flare"][goes.notna()].median()),
         "n_cpd_version_2": int(cpd.str.contains("_V02_").sum()),
         "median_cpd_window_min": float((window[1] - window[0]).dt.total_seconds().median() / 60),
-        # T5: calendar grouping
         "flares_2024": int((year == 2024).sum()),
         "n_months": int(per_month.size),
         "busiest_month": per_month.idxmax(),
@@ -93,7 +74,6 @@ def reference_values(frame: pd.DataFrame) -> dict:
         "busiest_day": per_day.idxmax(),
         "busiest_day_count": int(per_day.max()),
         "attenuator_flares_2025": int(frame["att_in"][year == 2025].sum()),
-        # T6: derived quantities, consistency checks
         "median_rise_time_min": float((peak - start).dt.total_seconds().median() / 60),
         "strong_share_2024": float(strong[year == 2024].mean()),
         "year_highest_strong_share": int(share_by_year.idxmax()),
@@ -102,7 +82,6 @@ def reference_values(frame: pd.DataFrame) -> dict:
             (near_side != longitude_says_visible)[has_visibility].sum()
         ),
         "goes_class_agreement": float((goes.str[0] == estimated)[near_side & goes.notna()].mean()),
-        # T7: several steps
         "median_waiting_time_min": float(gaps.dt.total_seconds().median() / 60),
         "longest_gap_days": float(gaps.max().total_seconds() / 86400),
         "longest_gap_start_day": sorted_peaks[longest - 1].strftime("%Y-%m-%d"),

@@ -5,7 +5,7 @@ FIXTURE_PROJECT = Path(__file__).parent / "fixtures" / "tiny_project"
 
 
 def notebook_cells() -> list[dict]:
-    """A correct notebook for the tiny project; it relies on the engine's setup cell."""
+
     return [
         {"type": "markdown", "content": "# Tiny EDA"},
         {

@@ -1,4 +1,4 @@
-# Setup cell, written by the engine.
+
 import json
 
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ _findings = {}
 
 
 def report(claim_id, value):
-    """Record the value of one claim in artifacts/findings.json."""
+
     if isinstance(value, np.generic):
         value = value.item()
     if not isinstance(value, (bool, int, float, str)):
@@ -23,7 +23,7 @@ def report(claim_id, value):
 
 
 def report_plot(name, fig=None):
-    """Save a figure (default: the current one) as artifacts/<name>.png, then show it."""
+
     fig = fig or plt.gcf()
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(name)) or "plot"
     fig.savefig(f"artifacts/{safe}.png", dpi=100, bbox_inches="tight")

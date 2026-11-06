@@ -1,11 +1,3 @@
-"""Generated code only ever runs here: a locked-down container declared in `compose.yaml`
-(no network, read-only root, no capabilities, CPU/memory/process limits, your user).
-
-The container sees the dataset file, `docs/` and the notebook read-only, and writes only to
-`artifacts/`. The trusted executor (`docker/nb_executor.py`) runs the cells one by one and
-writes a journal line per cell, so a killed container still leaves an accurate record.
-"""
-
 import json
 import os
 import shutil
@@ -24,8 +16,8 @@ from eda_lite.config import ROOT, Project
 COMPOSE = ["docker", "compose", "--file", str(ROOT / "compose.yaml"), "--progress", "quiet"]
 EXECUTOR = ROOT / "docker" / "nb_executor.py"
 WORKDIR = "/work"
-STARTUP_MARGIN_S = 60  # container and kernel start-up on top of the per-cell timeouts
-STATUS_BY_EXIT_CODE = {0: "ok", 1: "error", 2: "timeout"}  # nb_executor.py's exit codes
+STARTUP_MARGIN_S = 60
+STATUS_BY_EXIT_CODE = {0: "ok", 1: "error", 2: "timeout"}
 
 
 class DockerUnavailable(Exception):
@@ -33,7 +25,7 @@ class DockerUnavailable(Exception):
 
 
 def build_notebook(cells: list[dict], setup: str) -> nbformat.NotebookNode:
-    """The engine's setup cell (id `setup`), then the model's cells (`cell_0`, `cell_1`, ...)."""
+
     notebook = new_notebook(
         metadata={
             "kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"}
@@ -48,9 +40,8 @@ def build_notebook(cells: list[dict], setup: str) -> nbformat.NotebookNode:
 
 
 def ensure_image() -> str:
-    """Build the sandbox image if it is missing; return its ID."""
     if shutil.which("docker") is None:
-        raise DockerUnavailable("docker CLI not found on PATH")
+        raise DockerUnavailable("Docker is not installed or not available on PATH")
     image = _docker(*COMPOSE, "config", "--images").stdout.strip()
     inspect = ["docker", "image", "inspect", "--format", "{{.Id}}", image]
     result = _docker(*inspect, check=False)
@@ -58,7 +49,10 @@ def ensure_image() -> str:
         _docker(*COMPOSE, "build")
         result = _docker(*inspect, check=False)
     if result.returncode != 0:
-        raise DockerUnavailable(f"docker is not usable: {result.stderr.strip()}")
+        detail = result.stderr.strip()
+        if "connect" in detail.lower() or "pipe" in detail.lower():
+            raise DockerUnavailable("Docker is not running")
+        raise DockerUnavailable(f"Docker is not usable: {detail}")
     return result.stdout.strip()
 
 
@@ -71,20 +65,19 @@ def _docker(*command: str, check: bool = True) -> subprocess.CompletedProcess:
 
 @dataclass
 class Execution:
-    status: str  # ok | error | timeout (a cell hit code_timeout_s) | killed (whole container)
+    status: str
     exit_code: int | None
     duration_s: float
     stdout: str
     stderr: str
-    cells: list[dict] = field(default_factory=list)  # journal: cell_id, status, error, outputs
-    executed: nbformat.NotebookNode | None = None  # with outputs; None if no cell finished
+    cells: list[dict] = field(default_factory=list)
+    executed: nbformat.NotebookNode | None = None
 
 
 def run_notebook(
     notebook_path: Path, project: Project, artifacts: Path, max_duration_s: float
 ) -> Execution:
-    """Execute a notebook in a fresh container and kernel. A failing cell does not stop the
-    cells after it; a cell timeout does. Files the notebook writes land in `artifacts`."""
+
     execution = project.config.execution
     notebook = json.loads(notebook_path.read_text())
     code_cells = sum(cell["cell_type"] == "code" for cell in notebook["cells"])
@@ -121,10 +114,9 @@ def run_notebook(
 
 
 def _run_container(command, mounts, cpus, memory, timeout_s):
-    """Run one sandbox container to completion, or kill it at the deadline (exit_code None)."""
     name = f"eda-lite-{uuid.uuid4().hex[:12]}"
     args = [*COMPOSE, "run", "--rm", "--no-TTY", "--no-deps", "--name", name]
-    args += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    args += _container_user_args()
     for host, container, mode in mounts:
         args += ["--volume", f"{Path(host).resolve()}:{container}{':ro' if mode == 'ro' else ''}"]
     started = time.monotonic()
@@ -133,14 +125,19 @@ def _run_container(command, mounts, cpus, memory, timeout_s):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={**os.environ, "EDA_CPUS": str(cpus), "EDA_MEMORY": memory},  # read by compose.yaml
+        env={**os.environ, "EDA_CPUS": str(cpus), "EDA_MEMORY": memory},
     )
     try:
         stdout, stderr = process.communicate(timeout=timeout_s)
         exit_code = process.returncode
     except subprocess.TimeoutExpired:
-        # Killing the CLI would leave the container running; kill the container itself.
         subprocess.run(["docker", "kill", name], capture_output=True, check=False)
         stdout, stderr = process.communicate()
         exit_code = None
     return exit_code, stdout, stderr, round(time.monotonic() - started, 3)
+
+
+def _container_user_args() -> list[str]:
+    if hasattr(os, "getuid") and hasattr(os, "getgid"):
+        return ["--user", f"{os.getuid()}:{os.getgid()}"]
+    return []
