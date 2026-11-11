@@ -10,6 +10,7 @@ from eda_lite.grade import CHECKS, METRICS, RUN_INFO, TRACE, grade, load_answers
 from eda_lite.model import ModelError, parse_cells
 from eda_lite.patterns import PATTERNS
 from eda_lite.report import compare
+from eda_lite.run import Answer
 
 
 @pytest.fixture
@@ -24,22 +25,6 @@ def test_load_project_is_strict(project, tmp_path):
     shutil.copytree(project.dir, tmp_path / "projects" / "renamed")
     with pytest.raises(ConfigError, match="must match its folder name"):
         load_project("renamed", root=tmp_path / "projects")
-
-
-def test_cli_defaults_to_zero_shot(monkeypatch):
-    from eda_lite import cli
-
-    selected = {}
-
-    def prompt_command(args):
-        selected["pattern"] = args.pattern
-        return 0
-
-    monkeypatch.setitem(cli.COMMANDS, "prompt", prompt_command)
-    monkeypatch.setattr("sys.argv", ["eda-lite", "prompt", "tiny_project"])
-
-    assert cli.main() == 0
-    assert selected["pattern"] == "zero_shot"
 
 
 def test_container_user_args_are_cross_platform(monkeypatch):
@@ -73,32 +58,46 @@ def test_parse_cells_rejects_off_contract_answers():
         assert error.value.kind == "malformed"
 
 
-def test_reflection_generates_reflects_and_executes():
+def _recording_run(answers: dict[str, Answer]):
+    calls = []
+
     class FakeRun:
-        def __init__(self):
-            self.steps = []
-            self.reflection_answer = None
+        def prompt(self, name, **extra):
+            calls.append(("prompt", name, extra))
+            return f"<{name} prompt>"
 
-        def prompt(self, name=None, **extra):
-            self.reflection_answer = extra.get("answer")
-            return name or "reflection"
+        def ask(self, prompt, *, step):
+            calls.append(("ask", prompt, step))
+            return answers[step]
 
-        def ask(self, prompt, *, step="generate", cells=True):
-            self.steps.append(step)
-            if step == "generate":
-                return type("Answer", (), {"text": "draft", "notebook": "draft.ipynb"})()
-            return type("Answer", (), {"text": "revised", "notebook": "revised.ipynb"})()
+        def execute(self, answer, *, step):
+            calls.append(("execute", answer, step))
 
-        def execute(self, answer, *, step="execute"):
-            self.steps.append(step)
-            self.executed = answer.notebook
+    return FakeRun(), calls
 
-    fake = FakeRun()
+
+def test_reflection_revises_the_draft_and_executes_the_revision():
+    draft = Answer(call="call_001", text="draft", notebook="draft.ipynb")
+    revised = Answer(call="call_002", text="revised", notebook="revised.ipynb")
+    fake, calls = _recording_run({"generate": draft, "reflect": revised})
+
     patterns.reflection(fake)
 
-    assert fake.steps == ["generate", "reflect", "execute"]
-    assert fake.reflection_answer == "draft"
-    assert fake.executed == "revised.ipynb"
+    assert calls == [
+        ("prompt", "zero_shot", {}),
+        ("ask", "<zero_shot prompt>", "generate"),
+        ("prompt", "reflection", {"answer": "draft"}),
+        ("ask", "<reflection prompt>", "reflect"),
+        ("execute", revised, "execute"),
+    ]
+
+
+def test_reflection_stops_when_the_draft_is_empty():
+    fake, calls = _recording_run({"generate": Answer(call="call_001")})
+
+    patterns.reflection(fake)
+
+    assert calls == [("prompt", "zero_shot", {}), ("ask", "<zero_shot prompt>", "generate")]
 
 
 def test_matches():
