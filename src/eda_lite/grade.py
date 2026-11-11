@@ -1,11 +1,3 @@
-"""Automated grading against the project's answer key, `evaluation_spec/answers.yaml`, plus
-cost and reliability metrics from the trace. A clean execution never counts as a correct one.
-
-The answer key is flat: `claim_id: expected value`, one per claim in project.yaml. One rule
-compares a reported value with it: text and whole numbers must match exactly, other numbers
-within 0.1% (relative).
-"""
-
 import json
 import math
 from datetime import datetime
@@ -15,17 +7,17 @@ import yaml
 
 from eda_lite.config import ConfigError, Project
 
-FINDINGS = "artifacts/findings.json"  # {claim_id: value}, written by report() in the setup cell
-REL_TOL = 1e-3  # for numbers that are not whole
-INVOCATION = "invocation.json"  # in the invocation folder: what all its seeds share
-# Where a run keeps its record and its grade (paths inside a run folder).
+FINDINGS = "artifacts/findings.json"
+REL_TOL = 1e-3
+INVOCATION = "invocation.json"
+
 LOGS, EVALUATION = "logs", "evaluation"
 TRACE, RUN_INFO = f"{LOGS}/trace.jsonl", f"{LOGS}/run.json"
 CHECKS, METRICS = f"{EVALUATION}/checks.json", f"{EVALUATION}/metrics.json"
 
 
 def load_answers(project: Project) -> dict:
-    """The answer key; it must give a value for exactly the claims in project.yaml."""
+
     path = project.answers_path
     answers = yaml.safe_load(path.read_text())
     if not isinstance(answers, dict):
@@ -39,7 +31,7 @@ def load_answers(project: Project) -> dict:
 
 
 def load_findings(path: Path) -> dict:
-    """claim_id -> reported value; empty if the file is missing or not a JSON object."""
+
     try:
         findings = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -56,7 +48,7 @@ def matches(expected, actual) -> bool:
 
 
 def grade(run_dir: Path, project: Project) -> dict:
-    """Grade every claim as pass, fail or missing. Writes `evaluation/checks.json`."""
+
     answers, findings = load_answers(project), load_findings(run_dir / FINDINGS)
     claims = []
     for claim_id in project.config.claims:
@@ -88,7 +80,7 @@ def read_trace(run_dir: Path) -> list[dict]:
 
 
 def metrics(events: list[dict]) -> dict:
-    """Cost and reliability of one run, computed from its trace alone."""
+
     calls = [e for e in events if e["event"] == "model_call"]
     answered = [e for e in calls if not e.get("error")]
     cells = [e for e in events if e["event"] == "cell"]
@@ -115,7 +107,7 @@ def metrics(events: list[dict]) -> dict:
 
 
 def _first_error(events: list[dict]) -> tuple[str | None, str | None]:
-    """The first thing that went wrong: the most useful single label for a failed run."""
+
     for e in events:
         if e["event"] == "model_call" and e.get("error"):
             return f"model_{e['error']['kind']}", e["error"]["message"]

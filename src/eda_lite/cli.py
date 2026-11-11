@@ -1,9 +1,3 @@
-"""`eda-lite run | prompt | trace | compare`; see `eda-lite --help`.
-
-Paths are fixed: projects come from `projects/<project_id>/`, prompts from
-`src/eda_lite/prompts/<name>.md`, runs go to `runs/`.
-"""
-
 import argparse
 import json
 from pathlib import Path
@@ -29,7 +23,10 @@ def main() -> int:
     for sub in (run, prompt):
         sub.add_argument("project", help=PROJECT_HELP)
         sub.add_argument(
-            "--pattern", choices=sorted(PATTERNS), required=True, help="uses prompts/<pattern>.md"
+            "--pattern",
+            choices=sorted(PATTERNS),
+            default="zero_shot",
+            help="agent pattern; default: zero_shot",
         )
     run.add_argument("--seeds", type=int, nargs="+", help="default: seeds in project.yaml")
 
@@ -53,7 +50,7 @@ def main() -> int:
 
 def _project(project_id: str) -> Project:
     project = load_project(project_id)
-    load_answers(project)  # no run starts without a valid answer key
+    load_answers(project)
     return project
 
 
@@ -104,7 +101,7 @@ def _compare(args) -> int:
 
 
 def _find_invocation(reference: str) -> Path:
-    """The newest invocation for `latest`, else the one whose folder name contains `reference`."""
+
     invocations = sorted(path.parent for path in RUNS_ROOT.glob(f"*/{INVOCATION}"))
     if reference == "latest":
         matches = invocations[-1:]

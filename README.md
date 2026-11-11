@@ -26,6 +26,28 @@ uv run eda-lite compare [call]                            # latest call's prompt
 uv run pytest                                             # unit tests; `-m docker` for end to end
 ```
 
+`zero_shot` is the default pattern, so `--pattern zero_shot` may be omitted:
+
+```bash
+uv run eda-lite run stix_flares_simple
+```
+
+## How it works
+
+```mermaid
+flowchart TD
+    A[CLI command] --> B[Load project]
+    B --> C[Build prompt]
+    C --> D[Call Ollama]
+    D --> E[Create notebook]
+    E --> F[Execute in Docker]
+    F --> G[Grade findings]
+    G --> H[Write logs and report]
+```
+
+`cli.py` starts the run, `patterns.py` chooses the agent strategy, and `run.py` coordinates
+the model call, sandbox execution, grading, and logging.
+
 ## Where to change things
 
 | To change | Edit |

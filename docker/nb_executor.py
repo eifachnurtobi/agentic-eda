@@ -1,16 +1,3 @@
-"""Trusted notebook executor. Runs inside the container, never on the host.
-
-Executes the input notebook cell by cell in a fresh kernel. After every code cell it appends
-one line to `<out_dir>/journal.jsonl` and rewrites `<out_dir>/executed.ipynb`, so the host
-still finds a partial notebook and an accurate journal if the container is killed.
-
-A cell that raises does not stop the notebook: later cells still run, so one broken cell
-costs only its own results. A cell that times out does stop it, because the kernel may still
-be busy.
-
-Exit code: 0 all cells ran cleanly, 1 a cell raised, 2 a cell timed out.
-"""
-
 import argparse
 import json
 import time

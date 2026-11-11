@@ -1,17 +1,15 @@
-"""Project specification: schema, loading and validation of `project.yaml`."""
-
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-ROOT = Path(__file__).resolve().parents[2]  # the eda-lite directory
+ROOT = Path(__file__).resolve().parents[2]
 PROJECTS_ROOT = ROOT / "projects"
 
 
 class ConfigError(Exception):
-    """The project specification is missing, malformed or incomplete."""
+    pass
 
 
 class _Strict(BaseModel):
@@ -20,12 +18,11 @@ class _Strict(BaseModel):
 
 class ModelConfig(_Strict):
     name: str = "qwen3:4b"
-    base_url: str = "http://localhost:11434"  # the Ollama server
+    base_url: str = "http://localhost:11434"
     temperature: float = Field(0.2, ge=0)
-    request_timeout_s: float = Field(30, gt=0)  # per model call; independent of execution limits
+    request_timeout_s: float = Field(30, gt=0)
     think: bool = False
-    # With `think`: cut the reasoning after this many tokens and let the model answer from
-    # there (budget forcing). Uses Qwen's chat template, so it is for qwen-family models.
+
     thinking_budget: int | None = Field(None, gt=0)
     num_ctx: int = Field(8192, gt=0)
 
@@ -33,26 +30,21 @@ class ModelConfig(_Strict):
 class ExecutionConfig(_Strict):
     cpus: float = Field(2, gt=0)
     memory: str = "2g"
-    code_timeout_s: float = Field(60, gt=0)  # per notebook cell or standalone script
-    total_run_budget_s: float = Field(900, gt=0)  # whole run: model calls plus executions
+    code_timeout_s: float = Field(60, gt=0)
+    total_run_budget_s: float = Field(900, gt=0)
 
 
 class BudgetConfig(_Strict):
-    """Hard limits per run. Reaching one ends the run cleanly."""
-
     max_model_calls: int = Field(10, ge=1)
 
 
 class ProjectConfig(_Strict):
-    """Contents of a project's `project.yaml`."""
-
     project_id: str
     research_question: str = Field(min_length=1)
-    # What the notebook must report with `report(claim_id, value)`: claim_id -> definition.
-    # Never an expected value; those live in evaluation_spec/answers.yaml.
+
     claims: dict[str, str] = Field(min_length=1)
-    dataset: str  # file name of the CSV inside the project's data/ directory
-    seeds: list[int] = [1, 2, 3]  # one run per seed
+    dataset: str
+    seeds: list[int] = [1, 2, 3]
     model: ModelConfig = ModelConfig()
     execution: ExecutionConfig = ExecutionConfig()
     budgets: BudgetConfig = BudgetConfig()
@@ -60,15 +52,6 @@ class ProjectConfig(_Strict):
 
 @dataclass(frozen=True)
 class Project:
-    """A project directory with its validated configuration. The layout is fixed:
-
-    projects/<project_id>/
-      project.yaml       the public task (this schema)
-      data/<dataset>     the CSV, mounted read-only into the sandbox
-      docs/*.md          documentation, pasted into the prompt
-      evaluation_spec/   EVALUATOR-ONLY: answers.yaml, never mounted, never in a prompt
-    """
-
     dir: Path
     config: ProjectConfig
 
@@ -86,7 +69,7 @@ class Project:
 
 
 def load_yaml(path: Path, model: type[BaseModel]):
-    """Read a YAML file into `model`; every problem is reported with its field path."""
+
     try:
         raw = yaml.safe_load(Path(path).read_text())
     except (OSError, yaml.YAMLError) as error:
@@ -102,7 +85,7 @@ def load_yaml(path: Path, model: type[BaseModel]):
 
 
 def load_project(project_id: str, root: Path = PROJECTS_ROOT) -> Project:
-    """The project in `<root>/<project_id>/`, with every input checked to exist."""
+
     project_dir = (root / project_id).resolve()
     if Path(project_id).name != project_id or project_id.startswith("."):
         raise ConfigError(f"'{project_id}' is a path; give a project ID, a folder in {root}")

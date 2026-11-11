@@ -1,16 +1,3 @@
-"""Step 0 reference analysis: recomputes every expected value in `answers.yaml` with plain pandas.
-
-EVALUATOR-ONLY, like the rest of this directory: never mounted into a container, never
-put in a prompt. Run it from the eda-lite folder to check the answer key against the data:
-
-    uv run python projects/stix_flares/evaluation_spec/reference_analysis.py
-
-It prints one line per claim and exits non-zero if any value disagrees with `answers.yaml` (same
-matching rule as the grader).
-The definitions follow `project.yaml`: a flare's month and year come from `peak_UTC`, and a
-flare is strong when `goes_estimated_mean_class` starts with M or X.
-"""
-
 import sys
 from pathlib import Path
 

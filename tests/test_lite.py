@@ -1,17 +1,16 @@
-"""eda-lite: prompt rendering, the cells contract, grading, and one run end to end."""
-
 import json
 import shutil
 
 import pytest
 from conftest import FIXTURE_PROJECT, cells_response
 
-from eda_lite import model, prompts, run
+from eda_lite import model, patterns, prompts, run, sandbox
 from eda_lite.config import ConfigError, load_project
 from eda_lite.grade import CHECKS, METRICS, RUN_INFO, TRACE, grade, load_answers, matches
 from eda_lite.model import ModelError, parse_cells
 from eda_lite.patterns import PATTERNS
 from eda_lite.report import compare
+from eda_lite.run import Answer
 
 
 @pytest.fixture
@@ -28,13 +27,23 @@ def test_load_project_is_strict(project, tmp_path):
         load_project("renamed", root=tmp_path / "projects")
 
 
+def test_container_user_args_are_cross_platform(monkeypatch):
+    monkeypatch.delattr(sandbox.os, "getuid", raising=False)
+    monkeypatch.delattr(sandbox.os, "getgid", raising=False)
+    assert sandbox._container_user_args() == []
+
+    monkeypatch.setattr(sandbox.os, "getuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(sandbox.os, "getgid", lambda: 1001, raising=False)
+    assert sandbox._container_user_args() == ["--user", "1000:1001"]
+
+
 def test_prompt_fills_project_fields_and_leaves_other_braces(project):
     text = prompts.render("zero_shot", project)
     assert project.config.research_question in text
-    assert "## Required claims\n- `n_rows`: Number of rows" in text
+    assert "### Required claims\n\n- `n_rows`: Number of rows" in text
     assert 'df = pd.read_csv("data/tiny_dataset.csv")' in text
-    assert '{"cells": [{"type"' in text  # the JSON example is not a placeholder
-    assert "expected" not in text.lower()  # nothing from the answer key
+    assert '{"cells": [{"type"' in text
+    assert "expected" not in text.lower()
 
 
 def test_fill_does_not_rescan_inserted_text():
@@ -49,10 +58,52 @@ def test_parse_cells_rejects_off_contract_answers():
         assert error.value.kind == "malformed"
 
 
+def _recording_run(answers: dict[str, Answer]):
+    calls = []
+
+    class FakeRun:
+        def prompt(self, name, **extra):
+            calls.append(("prompt", name, extra))
+            return f"<{name} prompt>"
+
+        def ask(self, prompt, *, step):
+            calls.append(("ask", prompt, step))
+            return answers[step]
+
+        def execute(self, answer, *, step):
+            calls.append(("execute", answer, step))
+
+    return FakeRun(), calls
+
+
+def test_reflection_revises_the_draft_and_executes_the_revision():
+    draft = Answer(call="call_001", text="draft", notebook="draft.ipynb")
+    revised = Answer(call="call_002", text="revised", notebook="revised.ipynb")
+    fake, calls = _recording_run({"generate": draft, "reflect": revised})
+
+    patterns.reflection(fake)
+
+    assert calls == [
+        ("prompt", "zero_shot", {}),
+        ("ask", "<zero_shot prompt>", "generate"),
+        ("prompt", "reflection", {"answer": "draft"}),
+        ("ask", "<reflection prompt>", "reflect"),
+        ("execute", revised, "execute"),
+    ]
+
+
+def test_reflection_stops_when_the_draft_is_empty():
+    fake, calls = _recording_run({"generate": Answer(call="call_001")})
+
+    patterns.reflection(fake)
+
+    assert calls == [("prompt", "zero_shot", {}), ("ask", "<zero_shot prompt>", "generate")]
+
+
 def test_matches():
     assert matches(33076, 33076.0)
-    assert not matches(33076, 33077)  # whole numbers: exact
-    assert matches(0.049492, 0.0495)  # others: within 0.1 %
+    assert not matches(33076, 33077)
+    assert matches(0.049492, 0.0495)
     assert not matches(0.049492, 0.05)
     assert not matches(1, True)
     assert matches("2024-09", " 2024-09 ")
@@ -118,7 +169,7 @@ def test_invocation_layout(project, tmp_path, monkeypatch):
     run_info = json.loads(first.path(RUN_INFO).read_text())
     assert set(run_info) == {"run_id", "seed", "started_at", "status", "error", "ended_at", "score"}
     top = {p.name for p in first.dir.iterdir()}
-    assert top == {"logs", "evaluation", "summary.md"}  # no notebook ran, so no result
+    assert top == {"logs", "evaluation", "summary.md"}
     logs = {p.name for p in (first.dir / "logs").iterdir()}
     assert logs == {
         "run.json",
@@ -148,7 +199,7 @@ def test_zero_shot_end_to_end(project, tmp_path, monkeypatch):
     assert result.path("logs/response_001.ipynb").exists()
     assert result.path("artifacts/boxplot.png").exists()
     events = [json.loads(line)["event"] for line in result.path(TRACE).read_text().splitlines()]
-    assert events.count("cell") == 3  # setup + two code cells
+    assert events.count("cell") == 3
 
 
 def _fake_chat(text: str):
@@ -169,20 +220,20 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
     old = _invocation(project, tmp_path, monkeypatch, "not json")
     old.run(1)
     old.finish()
-    again = _invocation(project, tmp_path, monkeypatch, "not json")  # same prompt: pooled
+    again = _invocation(project, tmp_path, monkeypatch, "not json")
     again.run(2)
     again.finish()
     assert again.info["prompt_sha"] == old.info["prompt_sha"]
 
     template.write_text("Answer {research_question} as cells.")
     edited = _invocation(project, tmp_path, monkeypatch, "not json")
-    assert "_tiny_project_zero_shot" in edited.dir.name  # (+ _N when started in the same second)
+    assert "_tiny_project_zero_shot" in edited.dir.name
     assert edited.info["prompt_sha"] != old.info["prompt_sha"]
     run_dir = edited.run(1).dir
     assert (run_dir / "logs/prompt_001.md").read_text().startswith("Answer How do the two")
     edited.finish()
 
-    (templates / "setup_cell.py").write_text("# changed setup\n")  # part of the prompt too
+    (templates / "setup_cell.py").write_text("# changed setup\n")
     assert prompts.prompt_sha("zero_shot") != edited.info["prompt_sha"]
     (templates / "other.md").write_text(template.read_text())
     other_pattern = _invocation(project, tmp_path, monkeypatch, "not json", pattern="other")
@@ -207,7 +258,7 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
     )
     other_model.run(1)
     other_model.finish()
-    warmer = project.config.model.model_copy(update={"temperature": 0.7})  # same model name
+    warmer = project.config.model.model_copy(update={"temperature": 0.7})
     other_setting = _invocation(
         project.__class__(project.dir, project.config.model_copy(update={"model": warmer})),
         tmp_path,
@@ -222,7 +273,7 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
     prompts_part, overview = rest.split("\nOverview\n")
 
     def rows(part: str) -> list[str]:
-        return [line for line in part.splitlines() if line.startswith("| ")][1:]  # no header
+        return [line for line in part.splitlines() if line.startswith("| ")][1:]
 
     call_rows = rows(calls_part)
     assert [row.split(" | ")[1] for row in call_rows] == [
@@ -234,11 +285,11 @@ def test_edited_prompt_gets_its_own_row_in_compare(project, tmp_path, monkeypatc
     assert "First errors" not in calls_part
 
     prompt_rows = rows(prompts_part)
-    assert len(prompt_rows) == 2  # other pattern, answer key, model and temperature left out
+    assert len(prompt_rows) == 2
     new = next(row for row in prompt_rows if edited.info["prompt_sha"][:7] in row)
     pooled = next(row for row in prompt_rows if old.info["prompt_sha"][:7] in row)
     assert new.startswith("| → |")
-    assert "| 0/2 |" in pooled  # perfect score: none of the two pooled seeds
+    assert "| 0/2 |" in pooled
 
     assert f"Call      {edited.dir.name} (prompt {edited.info['prompt_sha'][:7]})" in overview
     assert f"Model     {project.config.model.name}" in overview
@@ -269,19 +320,17 @@ def test_trace_prints_every_seed_or_one(tmp_path, monkeypatch, capsys):
     out = trace("000000Z")
     assert "000000Z_p_zero_shot/seed_1" in out and "000000Z_p_zero_shot/seed_2" in out
     assert "000001Z" not in out
-    out = trace("--seed", "2")  # latest invocation
+    out = trace("--seed", "2")
     assert "000001Z_p_zero_shot/seed_2" in out and "seed_1" not in out
     with pytest.raises(SystemExit):
         trace("000000Z", "--seed", "9")
     assert "seeds: 1, 2" in capsys.readouterr().err
     with pytest.raises(SystemExit):
-        trace("_p_zero_shot")  # ambiguous
+        trace("_p_zero_shot")
     assert "must match one invocation" in capsys.readouterr().err
 
 
 class _FakeStream:
-    """Stands in for a streamed Ollama reply: one JSON object per line."""
-
     def __init__(self, chunks: list[dict]):
         self.lines = [json.dumps(chunk).encode() for chunk in chunks]
 
@@ -309,6 +358,23 @@ def _stream(monkeypatch, chunks: list[dict]) -> dict:
     return sent
 
 
+def test_missing_ollama_model_has_actionable_error(project, monkeypatch):
+    _stream(monkeypatch, [{"error": "model 'qwen3:4b' not found"}])
+    with pytest.raises(model.ModelError) as error:
+        model.chat([], project.config.model, seed=1, schema=None, timeout_s=60)
+    assert "ollama pull qwen3:4b" in str(error.value)
+
+
+def test_unreachable_ollama_has_actionable_error(project, monkeypatch):
+    def post(*args, **kwargs):
+        raise model.requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr(model.requests, "post", post)
+    with pytest.raises(model.ModelError) as error:
+        model.chat([], project.config.model, seed=1, schema=None, timeout_s=60)
+    assert "Ollama is not running" in str(error.value)
+
+
 THINKING_CHUNKS = [
     {"message": {"thinking": "Let me "}, "done": False},
     {"message": {"thinking": "think."}, "done": False},
@@ -329,7 +395,7 @@ def test_chat_streams_thinking_and_content(project, monkeypatch):
         "thinking": "Let me think.",
     }
     assert (body["done_reason"], body["eval_count"], body["prompt_eval_count"]) == ("stop", 9, 5)
-    (only,) = body["phases"]  # not cut: one request, with Ollama's own counts
+    (only,) = body["phases"]
     assert only["endpoint"] == "chat" and (only["eval_count"], only["done_reason"]) == (9, "stop")
     assert only["seconds"] >= 0
 
@@ -396,11 +462,11 @@ def test_thinking_budget_cuts_reasoning_and_injects_end_of_thinking(project, mon
     assert continuation["prompt"] == (
         "<|im_start|>user\nDo the task.<|im_end|>\n<|im_start|>assistant\n<think>\nab\n\n"
         f"{model.BUDGET_NOTE}\n</think>\n\n"
-    )  # cut after two reasoning chunks
+    )
     assert body["message"] == {"role": "assistant", "content": '{"cells": []}', "thinking": "ab"}
     assert body["thinking_truncated"] is True and body["continuation"] == continuation
     assert body["eval_count"] == 4 + 2 and "context" not in body and "response" not in body
-    cut, answer = body["phases"]  # one entry per request, so the first one's cost is kept
+    cut, answer = body["phases"]
     assert cut["endpoint"] == "chat" and cut["stopped_by"] == "thinking_budget"
     assert cut["thinking_tokens"] == 2 and "eval_count" not in cut
     assert answer["endpoint"] == "generate"
@@ -409,7 +475,7 @@ def test_thinking_budget_cuts_reasoning_and_injects_end_of_thinking(project, mon
         30,
         "stop",
     )
-    assert payload["think"] is True  # the original request, as sent
+    assert payload["think"] is True
 
 
 def test_thinking_budget_is_ignored_without_think(project, monkeypatch):

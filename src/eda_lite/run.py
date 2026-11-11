@@ -1,29 +1,3 @@
-"""Invocations and runs. One `eda-lite run` call is an Invocation; it holds one Run per seed.
-
-Patterns only use `run.prompt()`, `run.ask()` and `run.execute()`. Each of these saves
-what it did under `logs/` and appends a line to the trace, so a pattern needs no logging.
-
-    runs/<time>_<project>_<pattern>/   one invocation
-      invocation.json      everything the seeds share: command, project, pattern, prompt
-                           hash, model, git, dataset and answer-key hashes, image; score per seed
-      config.yaml          project.yaml with every default filled in
-      seed_<N>/            one run
-        summary.md         the run at a glance
-        result.ipynb       the latest executed notebook, with outputs
-        artifacts/         the files it wrote: findings.json, plots
-        evaluation/        checks.json (the grade), metrics.json (cost, first error)
-        logs/
-          run.json         this seed: id, seed, times, status, error, score
-          trace.jsonl      one line per model call, cell, execution, grade
-          prompt_NNN.md    the exact text of model call NNN
-          thinking_NNN.md  its reasoning, when the model thinks (also when it ran out of time)
-          continuation_NNN.md  when the reasoning was cut at the thinking budget: the exact text
-                           the model continued from (prompt, cut reasoning, injected </think>)
-          call_NNN.json    its full request and response
-          response_NNN.*   the answer: .ipynb before it ran, .md as text, .txt if unparsable
-          exec_NNN.*.txt   what execution NNN printed outside the notebook (if anything)
-"""
-
 import json
 import shutil
 import subprocess
@@ -53,16 +27,14 @@ class BudgetExhausted(Exception):
 
 @dataclass
 class Answer:
-    call: str  # "call_001"
-    text: str | None = None  # the raw answer
-    cells: list[dict] | None = None  # parsed cells, for notebook answers
-    notebook: str | None = None  # logs/response_NNN.ipynb, ready to execute
+    call: str
+    text: str | None = None
+    cells: list[dict] | None = None
+    notebook: str | None = None
     error: ModelError | None = None
 
 
 class Invocation:
-    """One call of `eda-lite run`: one pattern (with its prompt), several seeds, one folder."""
-
     def __init__(
         self,
         project: Project,
@@ -72,7 +44,7 @@ class Invocation:
     ):
         self.project, self.config = project, project.config
         self.pattern_name, self.pattern = pattern_name, pattern
-        prompt_sha = prompts.prompt_sha(pattern_name)  # the pattern's own prompts/<pattern>.md
+        prompt_sha = prompts.prompt_sha(pattern_name)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         self.dir = _new_dir(Path(runs_root) / f"{stamp}_{self.config.project_id}_{pattern_name}")
         self.runs: list[Run] = []
@@ -84,14 +56,13 @@ class Invocation:
             "command": sys.argv,
             "project_id": self.config.project_id,
             "pattern": pattern_name,
-            "prompt_sha": prompt_sha,  # template + setup cell: changes whenever the text does
+            "prompt_sha": prompt_sha,
             "model": self.config.model.name,
             "started_at": _now(),
             "git": _git_version(),
-            # Only runs on the same dataset and answer key are compared with each other.
             "dataset_sha": prompts.sha(project.dataset_path),
             "answers_sha": prompts.sha(project.answers_path),
-            "image_id": ensure_image(),  # before any seed's clock starts: a build is slow
+            "image_id": ensure_image(),
         }
         self._write_info()
 
@@ -100,13 +71,13 @@ class Invocation:
         (self.dir / INVOCATION).write_text(json.dumps(self.info, indent=2) + "\n")
 
     def run(self, seed: int) -> "Run":
-        """Run the pattern once with this seed, in `seed_<N>/`. Never raises for a failed run."""
+
         run = run_once(self, seed)
         self.runs.append(run)
         return run
 
     def finish(self) -> None:
-        """Record the end time and the outcome per seed."""
+
         seeds = {
             str(run.seed): {k: run.info.get(k) for k in ("status", "score")} for run in self.runs
         }
@@ -119,14 +90,12 @@ class Run:
         self.seed = seed
         self.default_prompt = invocation.pattern_name
         self.dir = invocation.dir / f"seed_{seed}"
-        self.dir.mkdir()  # fails on a repeated seed rather than mixing two runs
+        self.dir.mkdir()
         self.id = f"{invocation.dir.name}/{self.dir.name}"
         self.calls = self.executions = 0
         self.deadline = time.monotonic() + self.config.execution.total_run_budget_s
         self.info = {"run_id": self.id, "seed": seed, "started_at": _now(), "status": "running"}
         self._write_info()
-
-    # -- files and trace ---------------------------------------------------------------
 
     def path(self, name: str) -> Path:
         path = self.dir / name
@@ -134,7 +103,7 @@ class Run:
         return path
 
     def save(self, name: str, data) -> str:
-        """Write a file inside the run; returns its run-relative name, as the trace cites it."""
+
         text = data if isinstance(data, str) else json.dumps(data, indent=2, default=str) + "\n"
         self.path(name).write_text(text)
         return name
@@ -154,10 +123,8 @@ class Run:
             raise BudgetExhausted("total_run_budget_s")
         return remaining
 
-    # -- what patterns use ---------------------------------------------------------------
-
     def prompt(self, name: str | None = None, **extra) -> str:
-        """A template from prompts/ filled with the public task; default: this run's prompt."""
+
         return prompts.render(name or self.default_prompt, self.project, **extra)
 
     def ask(
@@ -167,9 +134,7 @@ class Run:
         step: str = "generate",
         cells: bool = True,
     ) -> Answer:
-        """One model call. `prompt` is a user message, or a whole message list (for a system
-        prompt or a conversation). With `cells` the answer must be a notebook in the cells
-        format, and is saved as one; without, it is free text."""
+
         if self.calls >= self.config.budgets.max_model_calls:
             raise BudgetExhausted("max_model_calls")
         self.calls += 1
@@ -211,17 +176,17 @@ class Run:
         except ModelError as error:
             answer.error = error
             record["error"] = event["error"] = {"kind": error.kind, "message": str(error)}
-            if error.payload is not None:  # the call failed: keep what was sent and what arrived
+            if error.payload is not None:
                 record["request"], record["response"] = error.payload, error.partial
-            if answer.text is not None:  # an answer that came back but broke the contract
+            if answer.text is not None:
                 event["response"] = self.save(
                     f"{LOGS}/response_{number}.txt", f"Parsing failed: {error}\n\n{answer.text}\n"
                 )
         body = record.get("response") or {}
         thinking = body.get("message", {}).get("thinking")
-        if thinking:  # the model's reasoning, readable on its own (partial if it ran out of time)
+        if thinking:
             event["thinking"] = self.save(f"{LOGS}/thinking_{number}.md", thinking)
-        if body.get("continuation"):  # cut at the thinking budget: what the model continued from
+        if body.get("continuation"):
             event["continuation"] = self.save(
                 f"{LOGS}/continuation_{number}.md", body["continuation"]["prompt"]
             )
@@ -237,8 +202,7 @@ class Run:
         return answer
 
     def execute(self, answer: Answer, *, step: str = "execute") -> Execution:
-        """Run an answer's notebook in the sandbox. `artifacts/` and `result.ipynb` then hold
-        this execution's files and outputs (the latest execution is the one graded)."""
+
         self.executions += 1
         number = f"{self.executions:03d}"
         artifacts = self.path("artifacts")
@@ -248,7 +212,7 @@ class Run:
         )
         if result.executed is not None:
             nbformat.write(result.executed, self.path("result.ipynb"))
-        else:  # no cell finished: deliver the notebook without outputs
+        else:
             shutil.copyfile(self.path(answer.notebook), self.path("result.ipynb"))
 
         for cell in result.cells:
@@ -284,8 +248,7 @@ Pattern = Callable[[Run], None]
 
 
 def run_once(invocation: Invocation, seed: int) -> Run:
-    """Create the run, let the pattern work, then always grade and summarise.
-    Never raises for a failed run; the outcome is in run.json and summary.md."""
+
     run = Run(invocation, seed)
     run.log(
         "run_started",
@@ -303,7 +266,7 @@ def run_once(invocation: Invocation, seed: int) -> Run:
     except BaseException as failure:
         error = f"{type(failure).__name__}: {failure}"
         run.log("run_failed", error=error)
-        if not isinstance(failure, Exception):  # Ctrl-C: record it, then let it through
+        if not isinstance(failure, Exception):
             raise
     finally:
         checks = grade(run.dir, run.project)
@@ -321,7 +284,7 @@ def run_once(invocation: Invocation, seed: int) -> Run:
 
 
 def _new_dir(path: Path) -> Path:
-    """`path`, or `path_2`, `path_3`, ... if two invocations start in the same second."""
+
     candidate, number = path, 1
     while True:
         try:
@@ -333,7 +296,7 @@ def _new_dir(path: Path) -> Path:
 
 
 def _readable(messages: list[dict]) -> str:
-    """The prompt file: just the text for a single user message, else one section per message."""
+
     if len(messages) == 1:
         return messages[0]["content"]
     return "\n\n".join(f"<!-- {m['role']} -->\n{m['content']}" for m in messages)
